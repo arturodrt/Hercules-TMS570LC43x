@@ -23,13 +23,20 @@ the toolchain, the XDS110 connection, and flashing.
 | Function | Pin |
 |----------|-----|
 | LED A (blinks) | GIOB6 |
-| LED B (follows button) | GIOB7 |
+| LED B (follows buttons) | GIOB7 |
+| User button A | GIOB4 (active low) |
 | User button B | GIOB5 (active low) |
 
+Pins taken from the LaunchPad schematic: the LEDs are driven by GIOB6 and GIOB7,
+and the buttons connect GIOB4 and GIOB5 to ground when pressed.
+
 ## Behavior
-LED A toggles roughly once per second. LED B is on while the button is held.
+LED A blinks about once per second. LED B is on while either user button is held.
 
 ## Notes
+- The board has no external pull-up on the buttons, and HALCoGen configures
+  GIO pins with pull-downs by default, so the code selects the internal pull-up
+  on GIOB4 and GIOB5. Without it the buttons always read low.
 - Timing uses a busy-wait loop and is approximate. `01-rti-blinky` replaces it
   with a timer interrupt.
 - To build, import `ccs/` into CCS (*Import projects at their original

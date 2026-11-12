@@ -43,6 +43,21 @@
 
 
 /* USER CODE BEGIN (0) */
+/**
+ * @file    HL_sys_main.c
+ * @brief   00-blink-gio: GPIO output and input on the LAUNCHXL2-570LC43.
+ *
+ * LED A blinks continuously at about 1 Hz. LED B is lit while either user
+ * button is held down. The example uses only the HALCoGen GIO driver and a
+ * software delay, and is the first program to run after the toolchain is set up.
+ *
+ * @author  Arturo de los Rios
+ * @date    2026-11-11
+ *
+ * @note    The application code in this file lives between the USER CODE
+ *          markers, so it is preserved when HALCoGen regenerates the project.
+ */
+
 #include "HL_gio.h"
 /* USER CODE END */
 
@@ -51,27 +66,72 @@
 #include "HL_sys_common.h"
 
 /* USER CODE BEGIN (1) */
-/*
- * 00-blink-gio: GIO output and input on the LAUNCHXL2-570LC43.
+/*------------------------------------------------------------------------------
+ * Board configuration (LAUNCHXL2-570LC43 schematic)
+ *----------------------------------------------------------------------------*/
+
+/** LEDs are driven by GIOB6 (LED A) and GIOB7 (LED B). */
+#define LED_PORT          gioPORTB
+#define LED_A_PIN         6U
+#define LED_B_PIN         7U
+
+/** User buttons connect GIOB4 (button A) and GIOB5 (button B) to ground. */
+#define BUTTON_PORT       gioPORTB
+#define BUTTON_A_PIN      4U
+#define BUTTON_B_PIN      5U
+#define BUTTON_MASK       ((1U << BUTTON_A_PIN) | (1U << BUTTON_B_PIN))
+
+/** GIOB direction mask: 1 = output, 0 = input. Only the LED pins are outputs. */
+#define GIOB_DIRECTION    ((1U << LED_A_PIN) | (1U << LED_B_PIN))
+
+/*------------------------------------------------------------------------------
+ * Timing configuration
+ *----------------------------------------------------------------------------*/
+
+/** Busy-wait iterations per main-loop tick (about 2.5 ms; approximate). */
+#define TICK_DELAY_LOOPS  50000U
+
+/** Ticks between LED A toggles. Two toggles make one blink, about 1 Hz. */
+#define BLINK_TICKS       200U
+
+/*------------------------------------------------------------------------------
+ * Local function prototypes
+ *----------------------------------------------------------------------------*/
+
+/**
+ * @brief  Initializes the GIO module and configures the LED and button pins.
  *
- * LED A blinks continuously. LED B is lit while user button B is held.
- * The user buttons pull their pins low when pressed.
+ * Enables the GIO driver, sets the LED pins as outputs and the button pins as
+ * inputs, and selects the internal pull-up resistor on the button pins.
+ *
+ * @note   The LaunchPad connects each button between its GIO pin and ground
+ *         and provides no external pull-up. HALCoGen configures all GIO pins
+ *         with a pull-down, so without the pull-up selected here a button pin
+ *         would always read low.
  */
-#define LED_PORT         gioPORTB
-#define LED_A_PIN        6U
-#define LED_B_PIN        7U
+static void App_InitGpio(void);
 
-#define BUTTON_PORT      gioPORTB
-#define BUTTON_B_PIN     5U
+/**
+ * @brief  Reports whether a user button is currently pressed.
+ *
+ * The buttons are active low: with the pull-up enabled a pin reads 1 when its
+ * button is released and 0 when it is pressed.
+ *
+ * @return TRUE if button A or button B is pressed, otherwise FALSE.
+ */
+static boolean App_IsButtonPressed(void);
 
-/* GIOB pin direction mask: 1 = output, 0 = input. */
-#define GIOB_DIRECTION   ((1U << LED_A_PIN) | (1U << LED_B_PIN))
-
-/* The main loop runs one tick per TICK_DELAY_LOOPS busy-wait iterations and
- * toggles LED A every BLINK_TICKS ticks. Timing is approximate: it depends on
- * the CPU clock and the compiler optimization level. */
-#define TICK_DELAY_LOOPS 50000U
-#define BLINK_TICKS      100U
+/**
+ * @brief  Blocks for an approximate time using a busy-wait loop.
+ *
+ * @param  loops  Number of loop iterations to execute.
+ *
+ * @note   The elapsed time depends on the CPU clock and the compiler
+ *         optimization level. The counter is volatile so that the compiler
+ *         does not remove the loop. For accurate timing use a hardware timer
+ *         such as the RTI module.
+ */
+static void App_Delay(uint32 loops);
 /* USER CODE END */
 
 /** @fn void main(void)
@@ -83,12 +143,31 @@
 */
 
 /* USER CODE BEGIN (2) */
-static void delay(uint32 loops)
+static void App_InitGpio(void)
+{
+    gioInit();
+    gioSetDirection(LED_PORT, GIOB_DIRECTION);
+
+    /* PSL selects the pull type (1 = pull-up, 0 = pull-down).
+     * PULDIS disables the pull when set, so it is cleared to keep it enabled. */
+    BUTTON_PORT->PSL    |= BUTTON_MASK;
+    BUTTON_PORT->PULDIS &= ~BUTTON_MASK;
+}
+
+static boolean App_IsButtonPressed(void)
+{
+    const uint32 buttonState = BUTTON_PORT->DIN & BUTTON_MASK;
+
+    return (buttonState != BUTTON_MASK) ? TRUE : FALSE;
+}
+
+static void App_Delay(uint32 loops)
 {
     volatile uint32 count;
 
     for (count = 0U; count < loops; count++)
     {
+        /* Intentionally empty. */
     }
 }
 /* USER CODE END */
@@ -96,24 +175,26 @@ static void delay(uint32 loops)
 int main(void)
 {
 /* USER CODE BEGIN (3) */
-    gioInit();
-    gioSetDirection(LED_PORT, GIOB_DIRECTION);
-
     uint32 ticks = 0U;
 
+    App_InitGpio();
+
+    /* Cooperative super-loop: one iteration per tick. */
     for (;;)
     {
-        /* Button is active low: a pressed button reads 0. */
-        gioSetBit(LED_PORT, LED_B_PIN,
-                  (gioGetBit(BUTTON_PORT, BUTTON_B_PIN) == 0U) ? 1U : 0U);
+        /* Mirror the button state on LED B on every tick so that the
+         * response to a button press is not tied to the blink period. */
+        gioSetBit(LED_PORT, LED_B_PIN, App_IsButtonPressed() ? 1U : 0U);
 
-        if (++ticks >= BLINK_TICKS)
+        /* Toggle LED A once every BLINK_TICKS ticks. */
+        ticks++;
+        if (ticks >= BLINK_TICKS)
         {
             ticks = 0U;
             gioToggleBit(LED_PORT, LED_A_PIN);
         }
 
-        delay(TICK_DELAY_LOOPS);
+        App_Delay(TICK_DELAY_LOOPS);
     }
 /* USER CODE END */
 
