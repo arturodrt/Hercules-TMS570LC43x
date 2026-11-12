@@ -1,0 +1,16 @@
+# CCS / Theia build output
+Debug/
+Release/
+*.obj
+*.o
+*.out
+*.map
+.settings/
+.metadata/
+.launches/
+# HALCoGen backups
+*.bak
+.theia/
+
+# TI documents: keep local, do not redistribute
+docs/*.pdf
