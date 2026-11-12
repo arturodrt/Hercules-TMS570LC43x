@@ -101,20 +101,19 @@
 /**
  * @brief  Initializes the GIO module and configures the LED and button pins.
  *
- * Enables the GIO driver, sets the LED pins as outputs and the button pins as
- * inputs, and selects the internal pull-up resistor on the button pins.
+ * Enables the GIO driver and sets the LED pins as outputs. The button pins stay
+ * inputs, which is the reset direction of every GIO pin.
  *
- * @note   The LaunchPad connects each button between its GIO pin and ground
- *         and provides no external pull-up. HALCoGen configures all GIO pins
- *         with a pull-down, so without the pull-up selected here a button pin
- *         would always read low.
+ * @note   The LaunchPad connects each button between its GIO pin and ground and
+ *         provides an external pull-up to 3.3 V, so no pull configuration is
+ *         needed in software.
  */
 static void App_InitGpio(void);
 
 /**
  * @brief  Reports whether a user button is currently pressed.
  *
- * The buttons are active low: with the pull-up enabled a pin reads 1 when its
+ * The buttons are active low: with the board's pull-up a pin reads 1 when its
  * button is released and 0 when it is pressed.
  *
  * @return TRUE if button A or button B is pressed, otherwise FALSE.
@@ -147,11 +146,6 @@ static void App_InitGpio(void)
 {
     gioInit();
     gioSetDirection(LED_PORT, GIOB_DIRECTION);
-
-    /* PSL selects the pull type (1 = pull-up, 0 = pull-down).
-     * PULDIS disables the pull when set, so it is cleared to keep it enabled. */
-    BUTTON_PORT->PSL    |= BUTTON_MASK;
-    BUTTON_PORT->PULDIS &= ~BUTTON_MASK;
 }
 
 static boolean App_IsButtonPressed(void)

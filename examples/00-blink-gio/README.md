@@ -27,6 +27,8 @@ the toolchain, the XDS110 connection, and flashing.
 | User button A | GIOB4 (active low) |
 | User button B | GIOB5 (active low) |
 
+![GPIO wiring of the user LEDs and buttons](images/gpio-wiring.svg)
+
 Pins taken from the LaunchPad schematic: the LEDs are driven by GIOB6 and GIOB7,
 and the buttons connect GIOB4 and GIOB5 to ground when pressed.
 
@@ -34,9 +36,9 @@ and the buttons connect GIOB4 and GIOB5 to ground when pressed.
 LED A blinks about once per second. LED B is on while either user button is held.
 
 ## Notes
-- The board has no external pull-up on the buttons, and HALCoGen configures
-  GIO pins with pull-downs by default, so the code selects the internal pull-up
-  on GIOB4 and GIOB5. Without it the buttons always read low.
+- The board pulls each button pin up to 3.3 V through a 2.2 kΩ resistor (see the
+  diagram), so the code needs no pull-up configuration. Tested on the board:
+  both buttons work without enabling the internal pull-ups.
 - Timing uses a busy-wait loop and is approximate. `01-rti-blinky` replaces it
   with a timer interrupt.
 - To build, import `ccs/` into CCS (*Import projects at their original
