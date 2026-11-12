@@ -10,7 +10,7 @@ the tools, generating a project, building, and flashing, with screenshots.
 ## Layout
 
 ```
-docs/                 setup guide, images, and TI reference documents
+docs/                 setup guide and images
 examples/
   NN-name/
     README.md         what it shows, pins, expected result
@@ -26,6 +26,11 @@ so regenerating does not overwrite it.
 | # | Folder | Topic |
 |---|--------|-------|
 | 00 | [`00-blink-gio`](examples/00-blink-gio) | GIO outputs and inputs: LED blink and a button |
+
+## TI documentation
+
+- [LAUNCHXL2-570LC43 tool page](https://www.ti.com/tool/LAUNCHXL2-570LC43#tech-docs): board documents, schematic, quick start guide
+- [TMS570LC4357 product page](https://www.ti.com/product/TMS570LC4357#tech-docs): datasheet, Technical Reference Manual, application notes
 
 ## Tools
 

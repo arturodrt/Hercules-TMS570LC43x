@@ -147,6 +147,11 @@ held. See the [example README](../examples/00-blink-gio/README.md).
 
 ## Documents
 
-The TI documents used for this repo are in `docs/`: the TMS570LC4357 datasheet,
-the Technical Reference Manual (SPNU563), the development kit quick start guide
-and the FreeRTOS on Hercules devices note.
+TI's documents are not redistributed here. Download them from TI:
+
+- [LAUNCHXL2-570LC43 tool page](https://www.ti.com/tool/LAUNCHXL2-570LC43#tech-docs):
+  the development kit's quick start guide, schematic and layout, and user
+  documents.
+- [TMS570LC4357 product page](https://www.ti.com/product/TMS570LC4357#tech-docs):
+  the datasheet (SPNS195), the Technical Reference Manual (SPNU563), and
+  application notes.
