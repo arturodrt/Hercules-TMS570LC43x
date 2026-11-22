@@ -11,6 +11,8 @@ Release/
 # HALCoGen backups
 *.bak
 .theia/
+*.theia-workspace
+.clangd
 
 # TI documents: keep local, do not redistribute
 docs/*.pdf
