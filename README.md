@@ -27,6 +27,7 @@ so regenerating does not overwrite it.
 |---|--------|-------|
 | 00 | [`00-blink-gio`](examples/00-blink-gio) | GIO outputs and inputs: LED blink and a button |
 | 01 | [`01-rti-telemetry`](examples/01-rti-telemetry) | RTI tick interrupt, interrupt latency and CPU load, streamed as CSV over the SCI |
+| 02 | [`02-esm-fault-injection`](examples/02-esm-fault-injection) | ESM, flash ECC and the EPC, CPU lockstep: inject real faults and watch them reported |
 
 ## TI documentation
 
