@@ -26,6 +26,7 @@ so regenerating does not overwrite it.
 | # | Folder | Topic |
 |---|--------|-------|
 | 00 | [`00-blink-gio`](examples/00-blink-gio) | GIO outputs and inputs: LED blink and a button |
+| 01 | [`01-rti-telemetry`](examples/01-rti-telemetry) | RTI tick interrupt, interrupt latency and CPU load, streamed as CSV over the SCI |
 
 ## TI documentation
 

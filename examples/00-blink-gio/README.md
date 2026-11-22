@@ -39,7 +39,7 @@ LED A blinks about once per second. LED B is on while either user button is held
 - The board pulls each button pin up to 3.3 V through a 2.2 kΩ resistor (see the
   diagram), so the code needs no pull-up configuration. Tested on the board:
   both buttons work without enabling the internal pull-ups.
-- Timing uses a busy-wait loop and is approximate. `01-rti-blinky` replaces it
-  with a timer interrupt.
+- Timing uses a busy-wait loop and is approximate. `01-rti-telemetry` replaces
+  it with a timer interrupt.
 - To build, import `ccs/` into CCS (*Import projects at their original
   locations*). See `docs/setup.md`.
