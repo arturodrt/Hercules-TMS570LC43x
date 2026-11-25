@@ -43,6 +43,10 @@ typedef enum
     TM_CCM_SELFTEST_FLAGS,  /**< ccm_selftest_flags: second-path flags (ESM 1.31)   */
     TM_CCM_DETECT_CYCLES,   /**< ccm_detect_cycles: forcing to ESM handler, cycles  */
     TM_ESM_UNEXPECTED,      /**< esm_unexpected: group 2 errors not injected here   */
+    TM_ESM_BOOT_G1,         /**< esm_boot_g1: group 1 flags left at start-up (bits) */
+    TM_ESM_BOOT_G2,         /**< esm_boot_g2: group 2 flags left at start-up (bits) */
+    TM_ESM_UNEXPECTED_CH,   /**< esm_unexpected_ch: channels of unexpected errors (bits) */
+    TM_EPC_FIRST_ADDR,      /**< epc_first_addr: address in the first used CAM entry */
     TM_LINES_DROPPED,       /**< lines_dropped: lines lost to a full TX buffer      */
     TM_SAMPLES_MISSED,      /**< samples_missed: windows the main loop missed       */
     TM_CHANNEL_COUNT

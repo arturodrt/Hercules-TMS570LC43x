@@ -35,12 +35,18 @@ typedef struct
     uint32  ccmSelfTestFlags;   /**< CCM self-test flags (ESM 1.31) seen. */
     uint32  ccmDetectCycles;    /**< CPU cycles from forcing to the ESM handler. */
     uint32  unexpected;         /**< Group 2 errors this module did not inject. */
+    uint32  bootGroup1;         /**< ESM group 1 flags (channels 0-31) set at start-up. */
+    uint32  bootGroup2;         /**< ESM group 2 flags (ESMSR2 | ESMSSR2) set at start-up. */
+    uint32  unexpectedChannels; /**< Bit n set: an unexpected group 2 error on channel n. */
+    uint32  epcFirstAddress;    /**< Address in the first occupied EPC CAM entry, or 0. */
     boolean nErrorActive;       /**< The ESM drives the ERROR pin low. */
 } FaultStatus;
 
 /**
- * @brief  Prepares both injections: copies the flash ECC routine to RAM and
- *         opens an MPU window that lets it execute there, enables EPC error
+ * @brief  Takes over the ESM and EPC as a warm reset left them (records the
+ *         flags found set, clears them, empties the EPC CAM, releases the
+ *         ERROR pin), then prepares both injections: copies the flash ECC
+ *         routine to RAM and opens an MPU window that lets it execute there, enables EPC error
  *         events, and enables the CPU event export to the EPC.
  *
  * @return TRUE if flash ECC injection is available. FALSE if the RAM routine

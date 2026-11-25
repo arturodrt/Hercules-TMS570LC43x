@@ -13,9 +13,9 @@
 #include "telemetry.h"
 #include "uart.h"
 
-/** Longest line: 16 fields of at most 22 characters (sign, 20 digits, point),
- *  15 commas, CR LF: 369 bytes. */
-#define LINE_MAX 384U
+/** Longest line: 20 fields of at most 22 characters (sign, 20 digits, point),
+ *  19 commas, CR LF: 461 bytes. */
+#define LINE_MAX 464U
 
 /** How each channel is named in the header and how many decimals it has. */
 typedef struct
@@ -40,6 +40,10 @@ static const ChannelFormat k_channels[TM_CHANNEL_COUNT] =
     { "ccm_selftest_flags", 0U },
     { "ccm_detect_cycles",  0U },
     { "esm_unexpected",     0U },
+    { "esm_boot_g1",        0U },
+    { "esm_boot_g2",        0U },
+    { "esm_unexpected_ch",  0U },
+    { "epc_first_addr",     0U },
     { "lines_dropped",      0U },
     { "samples_missed",     0U },
 };

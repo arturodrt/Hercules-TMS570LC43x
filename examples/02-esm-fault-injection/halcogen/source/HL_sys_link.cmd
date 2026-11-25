@@ -56,13 +56,21 @@ MEMORY
 {
 /* USER CODE BEGIN (2) */
 /* USER CODE END */
-    VECTORS (X)  : origin=0x00000000 length=0x00000020
-    FLASH0  (RX) : origin=0x00000020 length=0x001FFFE0
+    VECTORS (X)  : origin=0x00000000 length=0x00000020 fill = 0xffffffff
+    FLASH0  (RX) : origin=0x00000020 length=0x0003FFE0 fill = 0xffffffff
     FLASH1  (RX) : origin=0x00200000 length=0x00200000
     STACKS  (RW) : origin=0x08000000 length=0x00001500
     RAM     (RW) : origin=0x08001500 length=0x0007EB00
 
 /* USER CODE BEGIN (3) */
+    /* 02-esm-fault-injection: FLASH0 above is cut to the first 256 KB and,
+     * with VECTORS, filled with 0xFFFFFFFF (re-apply both after regenerating
+     * with HALCoGen). Every byte there is then programmed, so the flash
+     * loader's Auto ECC Generation writes valid ECC for the holes between
+     * sections and for the space past the image too, and a cache line fill or
+     * prefetch there no longer raises ESM group 2 channel 3. The rest of
+     * bank 0 is listed here unused, so nothing is placed in it by accident. */
+    FLASH0B (RX) : origin=0x00040000 length=0x001C0000
 /* USER CODE END */
 }
 

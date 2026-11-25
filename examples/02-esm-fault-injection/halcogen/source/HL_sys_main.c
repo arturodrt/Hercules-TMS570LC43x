@@ -217,6 +217,10 @@ static void App_SendSample(const TickSample *sample, const FaultStatus *fault)
     values[TM_CCM_SELFTEST_FLAGS] = (sint64)fault->ccmSelfTestFlags;
     values[TM_CCM_DETECT_CYCLES]  = (sint64)fault->ccmDetectCycles;
     values[TM_ESM_UNEXPECTED]     = (sint64)fault->unexpected;
+    values[TM_ESM_BOOT_G1]        = (sint64)fault->bootGroup1;
+    values[TM_ESM_BOOT_G2]        = (sint64)fault->bootGroup2;
+    values[TM_ESM_UNEXPECTED_CH]  = (sint64)fault->unexpectedChannels;
+    values[TM_EPC_FIRST_ADDR]     = (sint64)fault->epcFirstAddress;
     values[TM_LINES_DROPPED]      = (sint64)Telemetry_LinesDropped();
     values[TM_SAMPLES_MISSED]     = (sint64)Tick_MissedSamples();
 
@@ -227,6 +231,7 @@ static void App_SendSample(const TickSample *sample, const FaultStatus *fault)
 int main(void)
 {
 /* USER CODE BEGIN (3) */
+    static const uint8 k_lineEnd[2] = { (uint8)'\r', (uint8)'\n' };
     TickSample sample;
     FaultStatus fault;
     boolean headerPending = TRUE;
@@ -237,6 +242,12 @@ int main(void)
 
     App_InitCycleCounter();
     Uart_Init();
+
+    /* A reset can cut the last line short, and the pin can glitch while the
+     * SCI starts; end whatever the host has so far, so the header that follows
+     * starts a line of its own. */
+    (void)Uart_Write(k_lineEnd, (uint32)sizeof(k_lineEnd));
+
     (void)Fault_Init();
     Tick_Init(&App_OnTick);
 

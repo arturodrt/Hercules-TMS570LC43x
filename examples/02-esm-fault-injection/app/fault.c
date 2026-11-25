@@ -61,6 +61,12 @@
 /** ESMEPSR.EPSF: 0 while the ERROR pin is low (TRM Table 16-12). */
 #define ESM_EPSR_PIN_HIGH           1U
 
+/** ESMEKR value that resets the ERROR pin to normal operation (TRM 16.2.2). */
+#define ESM_EKR_ERROR_PIN_RESET     0x5U
+
+/** Every channel of one status register; the flags are write-1-to-clear. */
+#define ESM_ALL_CHANNELS            0xFFFFFFFFU
+
 /*------------------------------------------------------------------------------
  * CCM-R5F key register 1 (TRM Table 13-9)
  *----------------------------------------------------------------------------*/
@@ -138,12 +144,17 @@ static uint32  s_eccDetected = 0U;
 static boolean s_eccReadOk = FALSE;
 static uint32  s_ccmSelfTestFlags = 0U;
 
+/* ESM flags found set at start-up, left from before a warm reset. */
+static uint32  s_bootGroup1 = 0U;
+static uint32  s_bootGroup2 = 0U;
+
 /* Written by the ESM FIQ, read by the main loop. */
 static volatile uint32  s_ccmInjected = 0U;
 static volatile uint32  s_ccmStartCycles = 0U;
 static volatile uint32  s_ccmDetected = 0U;
 static volatile uint32  s_ccmDetectCycles = 0U;
 static volatile uint32  s_unexpected = 0U;
+static volatile uint32  s_unexpectedChannels = 0U;  /* bit n: group 2 channel n seen */
 static volatile uint32  s_errorMs = 0U;
 static volatile boolean s_releasePending = FALSE;
 
@@ -234,6 +245,87 @@ static void Fault_ForgetLine(uint32 line)
     }
 }
 
+/** @return The address in the first occupied EPC CAM entry, or 0 if none is. */
+static uint32 Fault_FirstCamAddress(void)
+{
+    uint32 entry;
+    uint32 address = 0U;
+
+    for (entry = 0U; (entry < EPC_CAM_ENTRIES) && (address == 0U); entry++)
+    {
+        const uint32 tags = epcREG1->CAM_INDEX[entry / 4U];
+
+        if (((tags >> ((entry % 4U) * 8U)) & EPC_CAM_TAG_MASK) == EPC_CAM_TAG_OCCUPIED)
+        {
+            address = epcREG1->CAM_CONTENT[entry] & EPC_CAM_ADDRESS_MASK;
+        }
+    }
+
+    return address;
+}
+
+/** Marks every occupied EPC CAM entry as available again (see Fault_ForgetLine). */
+static void Fault_ForgetAll(void)
+{
+    uint32 entry;
+
+    for (entry = 0U; entry < EPC_CAM_ENTRIES; entry++)
+    {
+        const uint32 reg   = entry / 4U;
+        const uint32 shift = (entry % 4U) * 8U;
+        const uint32 tags  = epcREG1->CAM_INDEX[reg];
+
+        if (((tags >> shift) & EPC_CAM_TAG_MASK) == EPC_CAM_TAG_OCCUPIED)
+        {
+            epcREG1->CAM_INDEX[reg] = (tags & ~(EPC_CAM_TAG_MASK << shift))
+                                    | (EPC_CAM_TAG_AVAILABLE << shift);
+        }
+    }
+}
+
+/**
+ * Takes over the ESM and the EPC as a warm reset left them.
+ *
+ * HALCoGen's start-up runs esmInit() after a power-on, external or debug reset
+ * only (HL_sys_startup.c); after a watchdog, CPU or software reset the ESM's
+ * flags and ERROR pin and the EPC's CAM are as the previous run left them.
+ * Flags set before main() would reach the FIQ as soon as it is enabled and be
+ * counted as unexpected, which keeps the ERROR pin low for good, and a pending
+ * EPC flag would be counted as a detection nobody injected. So the flags are
+ * recorded for the telemetry (esm_boot_g1, esm_boot_g2), then cleared, the CAM
+ * is emptied and the ERROR pin is released. Group 3 is left alone: start-up
+ * already reports it (esmGroup3Notification).
+ *
+ * Must run before FIQ is enabled.
+ */
+static void Fault_ClearLeftovers(void)
+{
+    s_bootGroup1 = esmREG->SR1[0U];
+    s_bootGroup2 = esmREG->SR1[1U] | esmREG->SSR2;
+
+    /* Groups 1 and 2, channels 0-31, 32-63 and 64-95, then the group 2
+     * shadow register (TRM 16.4). */
+    esmREG->SR1[0U] = ESM_ALL_CHANNELS;
+    esmREG->SR4[0U] = ESM_ALL_CHANNELS;
+    esmREG->SR7[0U] = ESM_ALL_CHANNELS;
+    esmREG->SR1[1U] = ESM_ALL_CHANNELS;
+    esmREG->SR4[1U] = ESM_ALL_CHANNELS;
+    esmREG->SR7[1U] = ESM_ALL_CHANNELS;
+    esmREG->SSR2    = ESM_ALL_CHANNELS;
+
+    Fault_ForgetAll();
+
+    if ((esmREG->EPSR & ESM_EPSR_PIN_HIGH) == 0U)
+    {
+        esmREG->EKR = ESM_EKR_ERROR_PIN_RESET;
+
+        /* The pin is released only once its low time has run out; if it had
+         * not yet, Fault_Poll() asks again APP_NERROR_HOLD_MS after start. */
+        s_errorMs = 0U;
+        s_releasePending = TRUE;
+    }
+}
+
 /*------------------------------------------------------------------------------
  * ESM group 2 notification (called from HALCoGen's esmHighInterrupt FIQ)
  *----------------------------------------------------------------------------*/
@@ -258,8 +350,12 @@ void esmGroup2Notification(esmBASE_t *esm, uint32 channel)
     else
     {
         /* A group 2 error this module did not cause. It is a real fault: count
-         * it and never release the ERROR pin from here on. */
+         * it, note its channel, and never release the ERROR pin from here on. */
         s_unexpected++;
+        if (channel < 32U)
+        {
+            s_unexpectedChannels |= 1U << channel;
+        }
     }
 }
 
@@ -271,6 +367,8 @@ boolean Fault_Init(void)
 {
     const uint32 runStart = (uint32)&ramfuncRunStart;
     const uint32 runSize  = (uint32)&ramfuncRunSize;
+
+    Fault_ClearLeftovers();
 
     /* The CPU reports ECC errors on its AXI bus over its event bus; HALCoGen's
      * start-up enables the export on power-on reset only. */
@@ -377,5 +475,9 @@ void Fault_GetStatus(FaultStatus *status)
     status->ccmSelfTestFlags = s_ccmSelfTestFlags;
     status->ccmDetectCycles  = s_ccmDetectCycles;
     status->unexpected       = s_unexpected;
+    status->bootGroup1       = s_bootGroup1;
+    status->bootGroup2       = s_bootGroup2;
+    status->unexpectedChannels = s_unexpectedChannels;
+    status->epcFirstAddress  = Fault_FirstCamAddress();
     status->nErrorActive     = ((esmREG->EPSR & ESM_EPSR_PIN_HIGH) == 0U) ? TRUE : FALSE;
 }

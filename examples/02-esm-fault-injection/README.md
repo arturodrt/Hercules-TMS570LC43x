@@ -2,7 +2,7 @@
 
 **Topic:** Error Signaling Module, flash ECC and the EPC, CPU lockstep (CCM-R5F)
 **Board:** LAUNCHXL2-570LC43 (TMS570LC4357ZWT)
-**Status:** builds and links with TI Arm Compiler 20.2.7.LTS; not yet run on the board
+**Status:** builds and links with TI Arm Compiler 20.2.7.LTS; runs on the board (both injections detected, nERROR released after 1 s)
 
 ## What it shows
 The TMS570LC43x is built to detect its own faults. This example causes two
@@ -121,6 +121,8 @@ every 10 ms with device time in ms first. Send any byte to get the header again.
 | `ccm_selftest_flags` | The CCM's second reporting path seen (ESM group 1, channel 31) |
 | `ccm_detect_cycles` | CPU cycles from forcing the error to entering the notification in the FIQ (300 cycles = 1 µs) |
 | `esm_unexpected` | Group 2 errors this program did not inject. Should stay 0. |
+| `esm_boot_g1`, `esm_boot_g2` | ESM group 1 (channels 0-31) and group 2 flags found set at start-up, as bits, before they were cleared (bit n is channel n: 4 is group 2 channel 2, the CCM compare error) |
+| `esm_unexpected_ch`, `epc_first_addr` | Diagnostics: see *Notes* |
 | `lines_dropped`, `samples_missed` | As in 01 |
 
 ## Run it
@@ -191,6 +193,39 @@ A group 2 error always does two things:
 - **Unexpected errors.** If any group 2 error arrives that this program did not
   inject, `esm_unexpected` counts it and the ERROR pin is never released again.
   The program does not hide a real fault.
+- **Errors before `main()`.** HALCoGen's start-up runs `esmInit()` after a
+  power-on, external or debug reset only; after other resets the ESM's flags,
+  its ERROR pin and the EPC's CAM are as the previous run left them, and any
+  error raised during start-up is still pending too. Without care these would
+  reach the FIQ as unexpected errors as soon as it is enabled and hold the
+  ERROR pin low for good. `Fault_Init()` records the flags it finds
+  (`esm_boot_g1`, `esm_boot_g2`), clears them, empties the EPC CAM and
+  releases the pin before interrupts are enabled.
+- **No unprogrammed flash near the code.** The flash loader's Auto ECC
+  Generation writes ECC only for the bytes it programs. The CPU also reads
+  flash nothing was programmed into: a cache line fill or prefetch runs past
+  the end of the image (the ECC target is the last thing in flash) and into
+  the holes between sections, the largest the one between `.ovly` and the
+  256-byte aligned `.ramfunc`. Erased flash has no valid ECC, so those reads
+  raised ESM group 2 channel 3 (a fatal bus error) at every boot and on every
+  press of A, which held the ERROR pin low for good. `HL_sys_link.cmd`
+  therefore cuts FLASH0 to the first 256 KB and fills it and VECTORS with
+  0xFFFFFFFF: every byte there is programmed, and Auto ECC Generation (leave
+  it on) writes valid ECC for all of it.
+  - The two `fill` lines and FLASH0's shorter length are outside HALCoGen's
+    USER CODE blocks: apply them again after generating code with HALCoGen.
+  - The program must fit in those 256 KB (it uses about 29 KB); a section that
+    spills into FLASH1 gets no fill around it.
+  - Linker-generated ECC (`--ecc=on` with `vfill`) would cover all of flash,
+    but CCS 21's loader did not program it ("region is not writable", then a
+    verification error at 0xF0407FF0).
+- **Diagnostic columns.** `esm_unexpected_ch` has bit n set for each group 2
+  channel n that raised an unexpected error; `epc_first_addr` is the address in
+  the first occupied EPC CAM entry (0 if none), so a correctable error nobody
+  injected says where it was.
+- **First bytes after reset.** A reset can cut the line being sent short. The
+  program sends a line end before its header, so the header always starts a
+  line of its own and a host reads it.
 - **KILL OSC button.** The LaunchPad's KILL OSC button shorts the oscillator.
   The clock monitor catches it and the HF LPO replaces the oscillator and the
   PLL (TRM 14.4.2). That changes VCLK, so the serial baud rate and the
