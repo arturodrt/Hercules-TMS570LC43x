@@ -2,29 +2,124 @@
 
 **Topic:** RTI timer interrupt, interrupt timing, SCI telemetry
 **Board:** LAUNCHXL2-570LC43 (TMS570LC4357ZWT)
-**Status:** builds and links with TI Arm Compiler 20.2.7.LTS; not yet run on the board
+**Status:** builds with TI Arm Compiler 20.2.7.LTS and runs on the board; the plots below are captured from it
 
 ## What it shows
-`00-blink-gio` timed everything with a busy-wait. Here a 1 kHz interrupt from
-the RTI drives the program, and the interrupt measures itself:
+A real-time system has to answer two different questions about its CPU:
 
-- **Latency:** how long after the RTI compare match the handler starts running,
-  read from the RTI's own counter, at a resolution of 107 ns.
+- **How busy is it?** (*load*: the share of time it spends working)
+- **How fast does it react when something urgent happens?** (*latency*: the delay
+  between the event and the code that handles it starting to run)
+
+They are not the same thing. A CPU can be 40 % busy and still react instantly,
+or barely busy and react late. This example makes both visible, live.
+
+A timer, the RTI, interrupts the CPU 1000 times a second. Every time, the
+interrupt measures itself:
+
+- **Latency:** how long after the timer fired the handler started, read from the
+  RTI's own counter at a resolution of 107 ns.
 - **Duration:** how many CPU cycles the handler takes, read from the Cortex-R5F's
   PMU cycle counter.
 - **CPU load:** the share of CPU time spent in the handler and in main-loop work.
 
-A hundred times a second the main loop sends these values, with the LEDs and
-buttons, as a line of CSV text over the XDS110 virtual COM port. A telemetry
-viewer such as Radian plots them live; any serial terminal shows the raw lines.
+Latency and duration are two different stretches of one interrupt. At rest,
+latency is about 0.3 to 0.4 µs and the handler takes about 450 cycles
+(about 1.5 µs; 300 cycles = 1 µs):
 
-The two user buttons load the CPU in two different ways, so you can see the
-difference between **load** and **latency**:
+```mermaid
+flowchart LR
+    T(["Timer fires<br/>RTI compare match"]) -->|"<b>latency</b><br/>irq_lat_*_ns<br/>about 0.3 to 0.4 µs"| S(["Handler starts"])
+    S -->|"<b>duration</b><br/>isr_cycles_max<br/>about 450 cycles"| E(["Handler ends"])
+    E -->|"rest of the 1 ms tick"| N(["Main loop runs<br/><b>CPU load</b> counts its work"])
+```
+
+A hundred times a second the board sends these values, with the LEDs and
+buttons, as a line of CSV text over the XDS110 virtual COM port. A plotting tool draws
+them live; any serial terminal shows the raw lines.
+
+```mermaid
+flowchart LR
+    RTI["RTI timer<br/>1 kHz tick"] --> ISR["Tick handler<br/>measures latency<br/>and cycles"]
+    ISR --> LOOP["Main loop<br/>load, buttons, LEDs"]
+    LOOP --> SCI["SCI1<br/>115200 8N1"]
+    SCI --> USB["XDS110<br/>virtual COM port"]
+    USB --> RAD["Plotting tool<br/>live plots"]
+```
+
+## See it live
+The two user buttons stress the CPU in two different ways. Hold each one and
+watch the plots.
+
+1. Flash the board, then open the XDS110 **Application/User UART** COM port at
+   115200 8N1 in a plotting tool (see *Run it*).
+2. Plot the latency, CPU load and handler duration channels, with the buttons
+   as a reference.
+3. Hold button A, release it, then hold button B.
+
+![Live plots showing the buttons, interrupt latency, CPU load and handler duration: button A (green) then button B (red)](images/telemetry-overview.png)
+
+Read the plots by asking which one moved:
+
+```mermaid
+flowchart TD
+    Q{"Which plot jumped<br/>when you pressed?"}
+    Q -->|"irq_lat_max_ns"| L["The interrupt was <b>delayed</b><br/>the CPU was late"]
+    Q -->|"cpu_load_pct"| C["The CPU was <b>busy</b><br/>but still on time"]
+    L --> LA["Button A:<br/>interrupts masked"]
+    C --> CB["Button B:<br/>busy work, interrupts on"]
+```
+
+### Button A: a critical section that is too long
+The main loop masks interrupts for 50 µs, starting 20 µs before the tick is due.
+The tick fires while interrupts are masked, so it waits for the remaining 30 µs.
+
+```mermaid
+sequenceDiagram
+    participant M as Main loop
+    participant T as Timer
+    participant H as Tick handler
+    M->>M: Mask interrupts (20 µs before the tick)
+    T-->>M: Tick fires, but interrupts are masked
+    Note over M,H: The tick waits about 30 µs
+    M->>M: Unmask interrupts (50 µs after masking)
+    M->>H: Handler finally starts
+    H-->>M: Done in about 1.5 µs
+```
+
+![Live plots while button A is held: interrupt latency jumps to about 31 000 ns, CPU load rises only to about 7 %](images/telemetry-button-a.png)
+
+**Look for:** `irq_lat_max_ns` jumps to about 31 000 ns while the button is held
+(32 106 ns at the cursor). `cpu_load_pct` rises only to about 7 %, from about
+1 %. The CPU is hardly busier, but it reacts late.
+
+### Button B: plenty of work, no delay
+The main loop does 400 µs of busy work with interrupts enabled, so the tick can
+still interrupt it at once.
+
+```mermaid
+sequenceDiagram
+    participant M as Main loop
+    participant T as Timer
+    participant H as Tick handler
+    M->>M: Start 400 µs of busy work (interrupts on)
+    T-->>H: Tick fires, the CPU answers at once
+    H-->>M: Done in about 1.5 µs, back to the work
+    M->>M: Finish the busy work
+```
+
+![Live plots while button B is held: CPU load rises to about 40 %, interrupt latency stays at 320 to 426 ns](images/telemetry-button-b.png)
+
+**Look for:** `cpu_load_pct` rises to about 40 % (39.7 % at the cursor).
+`irq_lat_max_ns` stays between 320 and 426 ns. The CPU is much busier, but it
+reacts just as fast. In this capture the latency axis is zoomed to a few hundred
+nanoseconds, so the small jitter looks large. Button A's latency is about 70
+times higher.
 
 | Hold | What the main loop does, once per tick | What the telemetry shows |
 |------|----------------------------------------|--------------------------|
-| Button A | Masks IRQs for 50 µs, starting 20 µs before the tick is due (a critical section that is too long) | `irq_lat_max_ns` jumps to about 30 000; `cpu_load_pct` rises by about 5 |
-| Button B | 400 µs of busy work with IRQs enabled | `cpu_load_pct` rises by about 40; latency does not move |
+| Button A | Masks IRQs for 50 µs, starting 20 µs before the tick is due | `irq_lat_max_ns` jumps to about 31 000; `cpu_load_pct` rises to about 7 % |
+| Button B | 400 µs of busy work with IRQs enabled | `cpu_load_pct` rises to about 40 %; latency stays at 320 to 426 ns |
 
 ## Tools
 - HALCoGen 04.07.01
@@ -102,6 +197,7 @@ app/
   telemetry.c/.h  the channel table; header and data lines
 halcogen/         HALCoGen project; main() is in source/HL_sys_main.c
 ccs/              CCS project; links halcogen/source, halcogen/include and app/
+images/           HALCoGen settings and captured plots
 ```
 
 ## Pins
@@ -145,12 +241,12 @@ channels from the first line it sees then always sees either the header or data.
 1. Build and flash as in `00-blink-gio` (import `ccs/` into CCS; see
    `docs/setup.md`).
 2. Open the XDS110 **Application/User UART** COM port (Windows Device Manager
-   lists it under Ports) at 115200 8N1, in a serial terminal or in Radian.
+   lists it under Ports) at 115200 8N1, in a serial terminal or a plotting tool.
 3. Press the LaunchPad's reset button so the header arrives first, or send any
    character to ask for it.
 4. Hold button A, then button B, and watch the latency and load channels.
 
-In Radian, take the time from the first column, in milliseconds. That way the
+In a plotting tool, take the time from the first column, in milliseconds. That way the
 plot follows the board's clock, not the time the bytes reach the PC.
 
 ## How the measurements work

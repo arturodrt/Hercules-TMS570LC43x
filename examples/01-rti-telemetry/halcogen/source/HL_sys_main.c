@@ -50,8 +50,8 @@
  * A timer interrupt from the RTI replaces 00-blink-gio's busy-wait. The
  * interrupt measures its own latency and duration, and the main loop sends
  * the result, with the LEDs, the buttons and the CPU load, 100 times a second
- * over the XDS110 virtual COM port as CSV text lines a telemetry viewer such
- * as Radian plots live.
+ * over the XDS110 virtual COM port as CSV text lines that a telemetry viewer
+ * can plot live.
  *
  * Hold a user button to load the CPU and watch the telemetry respond:
  *  - button A masks IRQs for 50 us across each tick: interrupt latency rises

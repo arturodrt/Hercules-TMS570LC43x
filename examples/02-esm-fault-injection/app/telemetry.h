@@ -2,7 +2,7 @@
  * @file    telemetry.h
  * @brief   Telemetry as CSV text lines: one header line, then one line per sample.
  *
- * Wire format (what a host such as Radian reads):
+ * Wire format (what a host reads):
  *
  *     t_ms,seq,btn_a,btn_b,nerror,ecc_injected,ecc_detected,...\r\n
  *     20,1,0,0,0,0,0,...\r\n

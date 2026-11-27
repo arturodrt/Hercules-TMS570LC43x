@@ -17,6 +17,59 @@ port.
 
 LED A keeps blinking at 1 Hz through all of it: neither fault stops the program.
 
+### In plain words
+A safety chip must notice when its own hardware misbehaves. The TMS570 has
+circuits for exactly that: memory that corrects flipped bits, two CPUs that
+check each other, and one module, the ESM, that collects every report. This
+example makes the hardware misbehave on purpose, so you can watch it being
+caught.
+
+### Button A: a flipped bit in flash
+```mermaid
+flowchart LR
+    A(["Button A"]) --> F["One bit of a flash<br/>read is flipped<br/>on its way to the CPU"]
+    F --> S["SECDED logic<br/>corrects the bit"]
+    S --> R["Read still returns<br/>the right data<br/>ecc_read_ok = 1"]
+    S --> E["EPC records<br/>the address"]
+    E --> M["ESM group 1<br/>channel 4"]
+    M --> C["Software counts it<br/>ecc_detected + 1<br/>LED B toggles"]
+```
+The error is real and the chip repairs it on the spot. Nothing stops, and the
+only trace is the count.
+
+### Button B: the two CPUs disagree
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant CCM as CCM-R5F compare
+    participant ESM as ESM
+    participant Pin as ERROR pin and ERR LED
+    App->>CCM: Force an error for one cycle
+    CCM->>ESM: CPUs differ: compare error
+    ESM->>App: FIQ interrupt (ccm_detected + 1)
+    ESM->>Pin: Drive low, ERR LED lights
+    Note over App,Pin: Held for 1 s so the LED is visible
+    App->>ESM: Release the ERROR pin
+    ESM->>Pin: High again, LED off
+```
+This is the serious one. In a real system the ERROR pin would tell outside
+hardware to move to a safe state. Here the program only waits one second and
+releases it.
+
+### Try it
+Open the serial port as in *Run it*, then:
+
+1. Press **button A** a few times. After each press `ecc_injected` and
+   `ecc_detected` both go up by one, `ecc_read_ok` stays 1, and LED B toggles.
+2. Press **button B** once. The ERR LED lights for a second. `ccm_injected`,
+   `ccm_detected` and `ccm_selftest_flags` go up by one, and `nerror` is 1 for
+   that second.
+3. Check that `esm_unexpected` is still 0. It counts faults the program did not
+   cause, so any other value is a real fault.
+
+`ccm_detect_cycles` shows how fast the chip reacts: the CPU cycles from forcing
+the error to the handler running (300 cycles = 1 µs).
+
 TI's out-of-box demo on this LaunchPad includes the same two injections. This
 example does them in code you can read, with every register write traced to
 the Technical Reference Manual (SPNU563A) and the datasheet (SPNS195C).
